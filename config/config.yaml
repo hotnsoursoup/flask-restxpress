@@ -1,0 +1,23 @@
+
+app:
+  config_directory: 
+  enable_logging: False 
+  endpoints_directory: #Optional, will scan on .endpoints
+  disable_auth: True #os.warning
+  
+
+flask:
+  secret: !ENV $SECRET
+
+
+
+redis:
+  host: 127.0.0.1
+  port: 5040
+  db: 3 # with default value
+  config:
+    expire: 300
+
+endpoint:
+  db:
+  

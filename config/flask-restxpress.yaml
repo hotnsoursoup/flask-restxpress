@@ -1,0 +1,51 @@
+# flask-restxq_schema.yaml
+
+# General Information
+library_name: flask-restxq
+author: Victor Nguyen
+version: 1.0
+description: >
+  A flask library that provides a quick and simple way to deploy a flask app
+  using yaml configuration files.
+
+# Configuration Options. All top-level configuration options are dictionaries and inherits
+# the built-ins from flask. https://flask.palletsprojects.com/en/2.3.x/config/
+# Environment variables can be loaded by using an enviroment tag !ENV and e.g. secret: !ENV ${secret}
+
+
+# flask app configuration options
+options:
+  
+  config_dir:
+    type: string
+    required: False
+    default: "config"
+    description: >
+      The directory containing the configuration files.
+    
+  
+  app:
+    type: dictionary
+    required: True
+    description: >
+      Flask configuration settings
+    suboptions:
+      
+
+
+
+  # Option 2
+  option_name_2:
+    # ... (repeat the structure for each option)
+
+# Additional Sections (Optional)
+database:
+  type: 
+  default: "descriptive"
+  description: >
+    The type of analysis to perform.
+    Valid options: "descriptive", "regression", "clustering"
+  
+
+notes:
+  - Additional information, warnings, or tips for users.
