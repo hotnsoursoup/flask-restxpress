@@ -1,22 +1,35 @@
-mydatabase1:
+- name: mydatabase1
   description: Optional
   default: Bool[Optional]
-  dialect: required if key 'sqlalchemy' or 'odbc' is present. Only accepts 'mysql', 'mssql', 'postgresql', 'oracle', 'sqlite'
+  dialect: required. Only accepts 'mysql', 'mssql', 'postgresql', 'oracle', 'sqlite'
   #odbc, dsn, mssql, postgre, sqlite, sqlite3, etc
-  sqlalchemy: # This key determines the db connection type. Can be sqlalchemy, sqlite, or odbc.
-    connection_string: Required if host, username, password are not provided. 
-    database: Database name, Optional.
+  type: sqlalchemy # This key determines the db connection type. Can be sqlalchemy or odbc.
+  connection_string: Required if connection is not present
+  connection: required if connection_string not present
     host:
     port:
     username:
     password:
-    options: # A dictionary with unkown keys. Pool size is an example.
+    options: # A dictionary with unknown keys. Pool size is an example.
       pool_size:
 
+- name: mydatabase2
+  dialect: sqlite
+  path: required if dialect is sqlite.
+
+- name: mydatabase3
+  
+  default: False
+  type: odbc # This key determines the db connection type. Can be sqlalchemy, sqlite, or odbc.
+  connection_string: Null
+  connection: 
+    dsn: '' #only available if type = odbc
     
-mydatabase2:
-  sqlite: # This key determines the db connection type. Can be sqlalchemy, sqlite, or odbc.
-    path: sqlite.db Required
+
+
+    
+
+
 
 
 
