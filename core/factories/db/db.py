@@ -96,7 +96,7 @@ class DBConfig:
         
 
 
-class SqlAlchemyConn(DBConfig):
+class DBConn(DBConfig):
     "A default class for database connections"
     def __init__(self, config=None, name=None):
         """Creates a database connection from a database configuration
@@ -110,11 +110,11 @@ class SqlAlchemyConn(DBConfig):
         config = config if config else app.config['db']
         
         try:
-            # Use the named database configuration, else defaultif assigned, else first db listed..
+            # Use the named database configuration, else default if assigned, else first db listed.
             if name: 
                 config = config[name]
             elif self._default_db_name is not None:
-                config = config['db'][self._default_db_name]['sqla']
+                config = config['db'][self._default_db_name]['sqlalchemy']
             else:
                 if isinstance(config, list) and len(config['db']) > 0:
                     config = config['db'][0]
@@ -124,7 +124,7 @@ class SqlAlchemyConn(DBConfig):
             # Read and set connection parameters
             super().__init__(config)
             
-            self.create_sqlalchemy_connection()
+            self.build_connection
                     
         except KeyError as e:
             raise("Please check your configuration file for a valid database entry.")
@@ -139,24 +139,28 @@ class SqlAlchemyConn(DBConfig):
         return create_engine(connection_string,  **engine_options)
     
     @property
-    def sqa_port(self):
-        "Port constructor for SQAlchemy connection."
-        return ":" + str(self._conn.get('port')) if 'port' in self._conn else ''
+    def _const(self, key):
+        "constructor for sql alchemy connection strings"
+        return ":" + str(self._conn.get(key)) if key in self._conn else ''
 
+    ############ Need to check if having ":" without any following parameter will cause connection to fail
     @property
     def get_connection_string(self):
-        # Default mysql connection string using sqlalchemy
+        port = self._const('port')
+        password = self._const('password')
+        # connection string 
         if self.connection_string:
             return self.connection_string
-        return "{driver}://{username}:{password}@{host}{self.sqa_port}/{database}".format(**self._conn)
+        return "{driver}://{username}{password}@{host}{port}/{database}".format(**self._conn)
         
-
        
     def get_default_dbconfig(self, configs: list) -> str:
         for config in configs:
             if config.get('default') == True:
                 self._default_db_name = config['name']
-       
+    
+    
+    
 def get_db():
     # Grabs the db object within the application context using g
     if 'db' not in g:
