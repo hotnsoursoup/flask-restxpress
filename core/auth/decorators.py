@@ -2,8 +2,8 @@ from functools import wraps
 
 from flask import request, abort
 
-from core.db import get_db
-from core.utils.format_utils import format_marshaled_data
+from core.factories.db import get_db
+from core.utils.formatters import format_marshaled_data
 
 
 def get_apiauth_object_by_key(key):

@@ -1,19 +1,20 @@
+import pyodbc
+import pandas as pd
 from sqlalchemy import create_engine
-from werkzeug.datastructures import ImmutableDict as iDict
 from flask import g, current_app as app
+from .mysql import build_mysql_procedure
+from .db_utils import format_query
 
 
 
 # Validate the database dialect in the configuration file
 try:
-    dialect = app['config']['database']['dialect']
+    dialect = app.config['data']
     if dialect not in ['mysql', 'mssql', 'postgresql', 'oracle', 'sqlite']:
-        raise ("KeyError: Dialect must be one of: 'mysql', 'mssql', 'postgresql', 'oracle', 'sqlite'")
+        raise ValueError("Dialect must be one of: 'mysql', 'mssql', 'postgresql', 'oracle', 'sqlite'")
 except KeyError as e:
     raise("Please check your configuration file for a valid database entry. Error: {e}".format(e))
 
-
-allowed_connectors = {'sqlalchemy', 'odbc', 'dsn'}
 
 drivers = {
     "postgresql": "postgresql+psycopg2",
@@ -48,7 +49,7 @@ class DBConfig:
         
         self.connector = None
         self.driver = None
-        self.connection_string = None
+        self._connection_string = None
         self.dialect = None
         
         self.driver = None
@@ -73,19 +74,21 @@ class DBConfig:
         dialect = self.conn.get('dialect')
 
         
+        allowed_connectors = {'sqlalchemy', 'odbc', 'dsn'}
+
         if connector and connector in allowed_connectors:
             self.connector = self.conn.pop('connector')
         elif connector:
             raise ValueError(error_messages['invalid_connector'])
         # A connection string must always have a connector specified.
         if connection_string and connector:
-            self.connection_string = connection_string
+            self._connection_string = connection_string
         elif connection_string:
             raise ValueError(error_messages['missing_connector_with_connection_string'])
         # Supported dialects: mysql, mssql, oracle, postgresql, sqlite
         if dialect:
             self.dialect = dialect
-        elif not self.connection_string:
+        elif not self._connection_string:
             # A connection string is required or a dialect must be provided.
             raise ValueError(error_messages['missing_dialect'])
 
@@ -131,26 +134,38 @@ class DBConn(DBConfig):
     
     def engine(self):
         "Create a SQLAlchemy engine connection."
-        connection_string = self.get_connection_string()
         
-        # Add in any connection options if provided
         engine_options = self.config.options if self.config.options else {}
         
-        return create_engine(connection_string,  **engine_options)
+        return create_engine(self.connection_string,  **engine_options)
+    
+    def connect(self):
+        if self.config['type'] == 'sqlalchemy':
+            return self.engine.connect()
+        return self.conn.connect()
     
     @property
     def _const(self, key):
         "constructor for sql alchemy connection strings"
-        return ":" + str(self._conn.get(key)) if key in self._conn else ''
+        return ":" + str(self.conn.get(key)) if key in self.conn else ''
 
-    ############ Need to check if having ":" without any following parameter will cause connection to fail
+    """############ Need to check if having ":" without any following parameter will cause connection to fail
+    
+    
+    
+    
+    
+    """
+    
+    
     @property
-    def get_connection_string(self):
-        port = self._const('port')
-        password = self._const('password')
-        # connection string 
-        if self.connection_string:
-            return self.connection_string
+    def connection_string(self):
+
+        self._conn['port'] = self._const('port')
+        self._conn['password'] = self._const('password')
+        
+        if self._connection_string:
+            return self._connection_string
         return "{driver}://{username}{password}@{host}{port}/{database}".format(**self._conn)
         
        
@@ -159,6 +174,62 @@ class DBConn(DBConfig):
             if config.get('default') == True:
                 self._default_db_name = config['name']
     
+    def odbc_connect(self):
+    # Connects to the DB via odbc using the connection string.
+    # We return the object and assign itself the connection to provide
+    # 2 methods to access the connection
+        self.conn = pyodbc.connect(self.dbstring)
+        return self.conn
+
+    @property
+    def odbc_connection_string(self):
+        
+        driver = self.conn.get('driver')
+        connection_str = [f"DRIVER={{{driver}}}"]
+        
+        try:
+            for key, value in self.conn.items():
+                if isinstance(value, bool):
+                    value = 'yes' if value else 'no'
+                    connection_str.append(f"{key.upper()}={value}")
+        except KeyError as e:
+            raise("Please check your configuration file for a valid database entry.")
+        
+        return connection_str
+    
+    def execute(self, query=None, args=None, procedure=None):
+    # Used for delete, update, insert, etc.
+        try:
+            with self.conn as conn:
+                
+                if procedure:
+                    # Get the procedure sql string
+                    query = build_mysql_procedure(procedure, args)
+                else:
+                    # Format the query string
+                    query = format_query(query, args)
+            
+                if g.request.method == 'GET':
+                    # Results are returned as a list of dictionaries
+                    df = pd.read_sql(query, conn)
+                    
+                    if not df.empty:
+                        result = df.to_dict(orient='records')
+                        
+                        return result[0] if len(result) == 1 else result
+                    
+                    return None
+                else:
+                    with conn.cursor() as cursor:
+                        # This will execute the write command, but it is important
+                        # that you commit the changes to the database with validation
+                        # in the custom function
+                        cursor.execute(query)
+        except pyodbc.Error as e:
+            msg = e.args[1]
+
+def commit(self):
+    return self.conn.commit()
     
     
 def get_db():

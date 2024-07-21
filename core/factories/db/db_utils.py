@@ -4,7 +4,6 @@ from werkzeug.datastructures import ImmutableDict as iDict
 def format_query(query, format_args=None):
     
     # Formats the query string with given arguments
-    
     # Lowercase ensures consistency when formatting the args
     query = query.lower()
     

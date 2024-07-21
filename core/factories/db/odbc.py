@@ -9,20 +9,11 @@ def connect(self):
 def odbc_connection_string(self):
     
     connection_string = self.base_odbc_string
-    
-    fields = {
-        'host': 
-        'port': 'Port',
-        'username': 'UID',
-        'password': 'PWD',
-        'host':
-    }
-    
     try:
-        for key, field_name in fields.items():
-            value = dbconfig.get(key)
+        for key, value in self.conn.items():
+            value = config.get(key)
             if value:
-                connection_string += f"{field_name}={value};"
+                connection_string += f"{key}={value};"
     except KeyError as e:
         raise("Please check your configuration file for a valid database entry.")
     
@@ -32,50 +23,7 @@ def odbc_connection_string(self):
 def base_dsn_string(self):
     return "DSN=%s;UID=%s;PWD=%s;"
 
-def execute(self, query=None, args=None, procedure=None):
-    # Used for delete, update, insert, etc.
-    try:
-        with self.conn as conn:
-            
-            if procedure:
-                # Get the procedure sql string
-                query = build_procedure_sql_args(procedure, args)
-            else:
-                # Format the query string
-                query = format_query(query, args)
-        
-            if g.request.method == 'GET':
-                # Results are returned as a list of dictionaries
-                df = pd.read_sql(query, conn)
-                
-                if not df.empty:
-                    result = df.to_dict(orient='records')
 
-                    result = lowercase_all(result)
-                    
-                    return result[0] if len(result) == 1 else result
-                
-                return None
-            else:
-                with conn.cursor() as cursor:
-                    # This will execute the write command, but it is important
-                    # that you commit the changes to the database with validation
-                    # in the custom function
-                    cursor.execute(query)
-                
-                
-    except pyodbc.Error as e:
-        msg = e.args[1]
-        logger.error(msg)
-        logger.error(query)
-
-def commit(self):
-    return self.conn.commit()
-def log(query):
-    logger.debug(f'{trim_string(string=query)}')
-
-
-logger = logging.getLogger('error')
 
 
 import pyodbc
