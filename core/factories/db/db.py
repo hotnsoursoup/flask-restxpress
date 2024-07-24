@@ -1,10 +1,11 @@
+from typing import Dict, Any, Optional, Union, List
 import pyodbc
 import pandas as pd
-from sqlalchemy import create_engine
-from flask import g, current_app as app
-from .mysql import build_mysql_procedure
-from .db_utils import format_query
 
+from sqlalchemy import create_engine, text
+from flask import g, current_app as app
+
+from .db_utils import format_query
 
 
 # Validate the database dialect in the configuration file
@@ -33,17 +34,36 @@ error_messages = {
     'missing_connector_with_connection_string': "A valid connector is required when using a connection string."
 }
 
-class DBConfig:
+
+class BaseDB:
 
     
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, name=None):
         """Reads the database configuration to ensure the correct values are provided when providing
         connection information. 
     
 
         :param config: configuration dictionary for the database
         :type config: dict
-        """        
+        :param name: dictionary key for the db config being looked up
+        :type name: str
+        """
+        
+        config = config if config else app.config['db']
+        
+        # Check if db is a key in the config, otherwise assume config is at root
+        if 'db' in config:
+            config = config['db']
+        
+        if name is not None:
+            config = config[name]
+        elif self._default_db_name is not None:
+            config = config[self._default_db_name]
+        else:
+            # Grabs the first entry in case there are multiple.
+            config = next(iter(config.items()))   
+
+                 
         self._config = config
         self.conn = self.conn()
         
@@ -74,7 +94,7 @@ class DBConfig:
         dialect = self.conn.get('dialect')
 
         
-        allowed_connectors = {'sqlalchemy', 'odbc', 'dsn'}
+        allowed_connectors = {'sqlalchemy', 'odbc'}
 
         if connector and connector in allowed_connectors:
             self.connector = self.conn.pop('connector')
@@ -96,42 +116,101 @@ class DBConfig:
         self.args = self.conn.pop('args')
         self.params = self.conn.pop('params')
         self.function = self.conn.pop('function')
+    
+           
+    def get_default_dbconfig(self, configs: dict) -> str:
+        for config in configs.items():
+            if config.get('default') == True:
+                self._default_db_name = config['name']
+
+    def call_stored_procedure(
+        self,
+        procedure_name: str, 
+        params: Optional[Dict[str, Any]] = None
+    ) -> Union[Dict, List]:
+        """Executes a stored procedure with the given parameters.
         
+        :param procedure_name: The name of the stored procedure to call.
+        :type procedure_name: str
+        :param _params: A dictionary of parameter names and values (optional).
+        :type _params: dict[str, Any] | None, optional
 
+        :raises ValueError: If the database dialect is not supported.
+        """
 
-class DBConn(DBConfig):
-    "A default class for database connections"
+        # SQL templates based on dialect 
+        sql_templates = {
+            'postgresql': f"CALL {procedure_name}({', '.join([f':{key}' for key in params]) if params else ''})",
+            'mysql': f"CALL {procedure_name}({', '.join([f':{key}' for key in params]) if params else ''})",
+            'mssql': f"EXEC {procedure_name} {', '.join([f'@{key}=:{key}' for key in params]) if params else ''}",
+            'oracle': f"BEGIN {procedure_name}({', '.join([f':{key}' for key in params]) if params else ''}); END;",
+        }
+        
+        dialect = self.dialect
+
+        # Ensure dialect is supported
+        if dialect not in sql_templates:
+            raise ValueError("Unsupported database dialect")
+        
+        # Select the appropriate version of procedure based on dialect
+        sp_text = text(sql_templates[dialect])
+        
+        # Execute the stored procedure
+        with self.engine.connect() as conn:
+            results = conn.execute(sp_text)
+        
+        return self._process(results)
+        
+    def execute(self, query=None, params=None):
+        "Handles query executions"
+        
+        sql = format_query(sql)
+            
+        with self.connect() as conn:
+            
+            result = conn.execute(text(sql))
+
+    def _process(self, data):
+        "Handles return type"
+        results = [dict(row) for row in data]
+        
+        # Return one result as a dict
+        if len(results) == 1 and self.output == 'dict':
+            return results[0]
+        else:
+            # Return as a list of dicts
+            return results
+        
+    def _page(self, data):
+        "Handles pagination"
+        
+        # To be built
+        
+    def _marshal(self):
+        "Response marshaling"
+        
+        # To be built
+class SqAlchemyConn(BaseDB):
+    "A default class for database connections using SqlAlchemy"
     def __init__(self, config=None, name=None):
         """Creates a database connection from a database configuration
 
         :param config: database configuration
-        :type config: dict, list[dict]
-        :param name: _description_, defaults to None
-        :type name: _type_, optional
+        :type config: dict
+        :param name: key name for the db being called. defaults to None
+        :type name: str, optional
         """
-        # Set using the db config assigned to app if none is provided.
-        config = config if config else app.config['db']
         
         try:
-            # Use the named database configuration, else default if assigned, else first db listed.
-            if name: 
-                config = config[name]
-            elif self._default_db_name is not None:
-                config = config['db'][self._default_db_name]['sqlalchemy']
-            else:
-                if isinstance(config, list) and len(config['db']) > 0:
-                    config = config['db'][0]
-                else:
-                    next(iter(config.items()))
-                    
             # Read and set connection parameters
-            super().__init__(config)
+            super().__init__(config, name=name)
             
-            self.build_connection
-                    
+            self._engine = self.engine
+            
         except KeyError as e:
             raise("Please check your configuration file for a valid database entry.")
     
+    @property
     def engine(self):
         "Create a SQLAlchemy engine connection."
         
@@ -139,42 +218,45 @@ class DBConn(DBConfig):
         
         return create_engine(self.connection_string,  **engine_options)
     
-    def connect(self):
-        if self.config['type'] == 'sqlalchemy':
-            return self.engine.connect()
-        return self.conn.connect()
-    
-    @property
-    def _const(self, key):
-        "constructor for sql alchemy connection strings"
-        return ":" + str(self.conn.get(key)) if key in self.conn else ''
-
-    """############ Need to check if having ":" without any following parameter will cause connection to fail
-    
-    
-    
-    
-    
-    """
-    
-    
     @property
     def connection_string(self):
-
-        self._conn['port'] = self._const('port')
-        self._conn['password'] = self._const('password')
-        
         if self._connection_string:
             return self._connection_string
-        return "{driver}://{username}{password}@{host}{port}/{database}".format(**self._conn)
-        
-       
-    def get_default_dbconfig(self, configs: list) -> str:
-        for config in configs:
-            if config.get('default') == True:
-                self._default_db_name = config['name']
+        return "{driver}://{username}:{password}@{host}:{port}/{database}".format(**self._conn)
+           
+    def connect(self):
+        return self.engine.connect()
     
-    def odbc_connect(self):
+            
+    @property
+    def commit(self):
+        self.conn.commit()
+        
+
+class OdbcConn(BaseDB):
+    "A default class for database connections using ODBC/DSN"
+    def __init__(self, config=None, name=None):
+        """Creates a database connection from a database configuration for ODBC connections
+
+        :param config: database configuration
+        :type config: dict
+        :param name: key name for the db being called. defaults to None
+        :type name: str,
+        """
+        # Set using the db config assigned to app if none is provided.
+        
+        
+        try:
+            # Read and set connection parameters
+            super().__init__(config, name=name)
+            
+            self.build_connection
+                    
+        except KeyError as e:
+            raise("Please check your configuration file for a valid database entry.")
+    
+     
+    def connect(self):
     # Connects to the DB via odbc using the connection string.
     # We return the object and assign itself the connection to provide
     # 2 methods to access the connection
@@ -182,7 +264,7 @@ class DBConn(DBConfig):
         return self.conn
 
     @property
-    def odbc_connection_string(self):
+    def connection_string(self):
         
         driver = self.conn.get('driver')
         connection_str = [f"DRIVER={{{driver}}}"]
@@ -197,45 +279,21 @@ class DBConn(DBConfig):
         
         return connection_str
     
-    def execute(self, query=None, args=None, procedure=None):
-    # Used for delete, update, insert, etc.
-        try:
-            with self.conn as conn:
-                
-                if procedure:
-                    # Get the procedure sql string
-                    query = build_mysql_procedure(procedure, args)
-                else:
-                    # Format the query string
-                    query = format_query(query, args)
-            
-                if g.request.method == 'GET':
-                    # Results are returned as a list of dictionaries
-                    df = pd.read_sql(query, conn)
-                    
-                    if not df.empty:
-                        result = df.to_dict(orient='records')
-                        
-                        return result[0] if len(result) == 1 else result
-                    
-                    return None
-                else:
-                    with conn.cursor() as cursor:
-                        # This will execute the write command, but it is important
-                        # that you commit the changes to the database with validation
-                        # in the custom function
-                        cursor.execute(query)
-        except pyodbc.Error as e:
-            msg = e.args[1]
+    def dsn_connection_string(self):
+        # To be built
+        ""
+        
+    
 
-def commit(self):
-    return self.conn.commit()
-    
-    
-def get_db():
+_dbclass = {
+    "odbc": OdbcConn,
+    "sqlalchemy": SqAlchemyConn
+}
+
+def get_db(name=None):
     # Grabs the db object within the application context using g
     if 'db' not in g:
-        g.db = DBConn()
+        g.db = 
         g.db.connect()
     return g.db
 
