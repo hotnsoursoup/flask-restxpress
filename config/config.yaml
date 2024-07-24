@@ -1,10 +1,10 @@
 
 app:
-  config_directory: 
   enable_logging: False 
   endpoints_directory: #Optional, will scan on .endpoints
   disable_auth: True #os.warning
-  
+  db_config: #directory, optional, will look for in default \config
+  use_models: False # Optional, defaults to false
 
 flask:
   secret: !ENV $SECRET
