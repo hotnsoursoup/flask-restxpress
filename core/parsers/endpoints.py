@@ -3,7 +3,7 @@ from typing import Union, Any
 
 from flask_restx import Namespace
 
-from core.factories.templates import ApiTemplate
+from core.factories.templates import Endpoint
 
 
 
@@ -16,7 +16,7 @@ def load_endpoint_settings(api: Namespace,
 
     if isinstance(settings, dict):
         # Create the api object for each
-        endpoint = ApiTemplate(api=api, settings=settings)
+        endpoint = Endpoint(api=api, settings=settings)
 
         # Initiate the object
         endpoint.create_endpoint()

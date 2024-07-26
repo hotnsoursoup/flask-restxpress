@@ -1,10 +1,8 @@
 from typing import Dict, Any, Optional, Union, List
 import pyodbc
-import pandas as pd
 
 from sqlalchemy import create_engine, text
 from flask import g, current_app as app
-
 from .db_utils import format_query
 
 
@@ -15,7 +13,6 @@ try:
         raise ValueError("Dialect must be one of: 'mysql', 'mssql', 'postgresql', 'oracle', 'sqlite'")
 except KeyError as e:
     raise("Please check your configuration file for a valid database entry. Error: {e}".format(e))
-
 
 drivers = {
     "postgresql": "postgresql+psycopg2",
@@ -31,9 +28,8 @@ error_messages = {
     'missing_connector': "A connection string requires a connector: odbc, dsn, sqlalchemy",
     'missing_dialect': "Please check your configuration file. A valid dialect or connection string is required.",
     'invalid_connector': "Invalid connector specified. Only sqlalchemy, odbc, and dsn are allowed.",
-    'missing_connector_with_connection_string': "A valid connector is required when using a connection string."
+    'missing_connector_with_database_uri': "A valid connector is required when using a connection string."
 }
-
 
 class BaseDB:
 
@@ -69,7 +65,7 @@ class BaseDB:
         
         self.connector = None
         self.driver = None
-        self._connection_string = None
+        self._database_uri = None
         self.dialect = None
         
         self.driver = None
@@ -87,9 +83,9 @@ class BaseDB:
             
 
     def read_config(self):
-        """Read the configuration and set to class. Remove keys not used for connection creation"""
+        """Read the configuration and sets to class. Remove keys not used for connection creation"""
 
-        connection_string = self.conn.get('connection_string')
+        database_uri = self.conn.get('database_uri')
         connector = self.conn.get('connector')
         dialect = self.conn.get('dialect')
 
@@ -101,14 +97,14 @@ class BaseDB:
         elif connector:
             raise ValueError(error_messages['invalid_connector'])
         # A connection string must always have a connector specified.
-        if connection_string and connector:
-            self._connection_string = connection_string
-        elif connection_string:
-            raise ValueError(error_messages['missing_connector_with_connection_string'])
+        if database_uri and connector:
+            self._database_uri = database_uri
+        elif database_uri:
+            raise ValueError(error_messages['missing_connector_with_database_uri'])
         # Supported dialects: mysql, mssql, oracle, postgresql, sqlite
         if dialect:
             self.dialect = dialect
-        elif not self._connection_string:
+        elif not self._database_uri:
             # A connection string is required or a dialect must be provided.
             raise ValueError(error_messages['missing_dialect'])
 
@@ -122,6 +118,7 @@ class BaseDB:
         for config in configs.items():
             if config.get('default') == True:
                 self._default_db_name = config['name']
+
 
     def call_stored_procedure(
         self,
@@ -167,11 +164,12 @@ class BaseDB:
         sql = format_query(sql)
             
         with self.connect() as conn:
+            results = conn.execute(text(sql))
             
-            result = conn.execute(text(sql))
-
+        return self._process(results)
+    
     def _process(self, data):
-        "Handles return type"
+        "Handles return types and paging"
         results = [dict(row) for row in data]
         
         # Return one result as a dict
@@ -188,6 +186,11 @@ class BaseDB:
         
     def _marshal(self):
         "Response marshaling"
+        
+        # To be built
+        
+    def _read_sql_file(self):
+        "For processing .sql files"
         
         # To be built
 class SqAlchemyConn(BaseDB):
@@ -216,18 +219,18 @@ class SqAlchemyConn(BaseDB):
         
         engine_options = self.config.options if self.config.options else {}
         
-        return create_engine(self.connection_string,  **engine_options)
+        return create_engine(self.database_uri,  **engine_options)
     
     @property
-    def connection_string(self):
-        if self._connection_string:
-            return self._connection_string
+    def database_uri(self):
+        if self._database_uri:
+            return self._database_uri
         return "{driver}://{username}:{password}@{host}:{port}/{database}".format(**self._conn)
            
     def connect(self):
-        return self.engine.connect()
+        self.conn = self.engine.connect()
+        return self.conn
     
-            
     @property
     def commit(self):
         self.conn.commit()
@@ -264,7 +267,7 @@ class OdbcConn(BaseDB):
         return self.conn
 
     @property
-    def connection_string(self):
+    def database_uri(self):
         
         driver = self.conn.get('driver')
         connection_str = [f"DRIVER={{{driver}}}"]
@@ -279,7 +282,7 @@ class OdbcConn(BaseDB):
         
         return connection_str
     
-    def dsn_connection_string(self):
+    def dsn_database_uri(self):
         # To be built
         ""
         
@@ -290,10 +293,17 @@ _dbclass = {
     "sqlalchemy": SqAlchemyConn
 }
 
+def get_db_type(name):
+    app.config['db']['name']
+
 def get_db(name=None):
     # Grabs the db object within the application context using g
     if 'db' not in g:
-        g.db = 
+        if not name:
+            type = 'mysql'
+        else:
+            get_db_type(name)
+        g.db = _dbclass('mysql')
         g.db.connect()
     return g.db
 

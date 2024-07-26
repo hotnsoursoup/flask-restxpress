@@ -4,7 +4,7 @@
   dialect: required. Only accepts 'mysql', 'mssql', 'postgresql', 'oracle', 'sqlite'
   #odbc, dsn, mssql, postgre, sqlite, sqlite3, etc
   type: sqlalchemy # Optional. Defaults to sqlalchemy. Can choose sqlalchemy or odbc. odbc can support dsn strings.
-  database_uri: Required if connection is not present
+  connection_string: Required if connection is not present
   connection: required if connection_string not present. Not required or used with odbc.
     host:
     port:
@@ -23,7 +23,7 @@
   
   default: False
   type: odbc # This key determines the db connection type. Can be sqlalchemy, sqlite, or odbc.
-  database_uri: Null
+  connection_string: Null
   dsn: Required if type is odbc.
     
 
