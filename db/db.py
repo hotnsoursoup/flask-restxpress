@@ -6,14 +6,8 @@ from flask import g, current_app as app
 from .db_utils import format_query
 
 
-# Validate the database dialect in the configuration file
-try:
-    dialect = app.config['data']
-    if dialect not in ['mysql', 'mssql', 'postgresql', 'oracle', 'sqlite']:
-        raise ValueError("Dialect must be one of: 'mysql', 'mssql', 'postgresql', 'oracle', 'sqlite'")
-except KeyError as e:
-    raise("Please check your configuration file for a valid database entry. Error: {e}".format(e))
 
+# Supported database drivers
 drivers = {
     "postgresql": "postgresql+psycopg2",
     "mysql": "mysql+pymysql",
@@ -28,25 +22,25 @@ error_messages = {
     'missing_connector': "A connection string requires a connector: odbc, dsn, sqlalchemy",
     'missing_dialect': "Please check your configuration file. A valid dialect or connection string is required.",
     'invalid_connector': "Invalid connector specified. Only sqlalchemy, odbc, and dsn are allowed.",
-    'missing_connector_with_database_uri': "A valid connector is required when using a connection string."
+    'missing_connector_with_database_uri': "A valid connector is required when using a connection string.",
+    'missing_db_config': "Please check your configuration file for a valid database entry."
 }
 
 class BaseDB:
 
-    
     def __init__(self, config: dict, name=None):
         """Reads the database configuration to ensure the correct values are provided when providing
         connection information. 
-    
 
         :param config: configuration dictionary for the database
         :type config: dict
         :param name: dictionary key for the db config being looked up
         :type name: str
         """
-        
-        config = config if config else app.config['db']
-        
+        try:
+            config = config if config else app.config['db']
+        except KeyError:
+            raise KeyError(error_messages['missing_db_config'])
         # Check if db is a key in the config, otherwise assume config is at root
         if 'db' in config:
             config = config['db']
@@ -65,7 +59,7 @@ class BaseDB:
         
         self.connector = None
         self.driver = None
-        self._database_uri = None
+        self._uri = None
         self.dialect = None
         
         self.driver = None
@@ -79,13 +73,13 @@ class BaseDB:
         try:
             self.conn = self._config['connection']
         except KeyError:
-            raise ValueError(error_messages['missing_connection'])
+            raise KeyError(error_messages['missing_connection'])
             
 
     def read_config(self):
         """Read the configuration and sets to class. Remove keys not used for connection creation"""
 
-        database_uri = self.conn.get('database_uri')
+        database_uri = self.conn.get('uri')
         connector = self.conn.get('connector')
         dialect = self.conn.get('dialect')
 
@@ -114,7 +108,11 @@ class BaseDB:
         self.function = self.conn.pop('function')
     
            
-    def get_default_dbconfig(self, configs: dict) -> str:
+    def get_default_dbconfig(
+        self, 
+        configs: dict
+    ) -> str:
+        
         for config in configs.items():
             if config.get('default') == True:
                 self._default_db_name = config['name']
@@ -157,8 +155,13 @@ class BaseDB:
             results = conn.execute(sp_text)
         
         return self._process(results)
-        
-    def execute(self, query=None, params=None):
+    
+    
+    def execute(
+        self, 
+        query: str=None, 
+        params: dict=None
+    ):
         "Handles query executions"
         
         sql = format_query(sql)
@@ -168,12 +171,13 @@ class BaseDB:
             
         return self._process(results)
     
-    def _process(self, data):
+    @classmethod
+    def _process(cls, data:dict) -> dict:
         "Handles return types and paging"
         results = [dict(row) for row in data]
         
         # Return one result as a dict
-        if len(results) == 1 and self.output == 'dict':
+        if len(results) == 1 and cls.output == 'dict':
             return results[0]
         else:
             # Return as a list of dicts
@@ -181,6 +185,11 @@ class BaseDB:
         
     def _page(self, data):
         "Handles pagination"
+        
+        # To be built
+        
+    def _serialize(self):
+        "Response serialization"
         
         # To be built
         
@@ -219,10 +228,10 @@ class SqAlchemyConn(BaseDB):
         
         engine_options = self.config.options if self.config.options else {}
         
-        return create_engine(self.database_uri,  **engine_options)
+        return create_engine(self.uri,  **engine_options)
     
     @property
-    def database_uri(self):
+    def uri(self):
         if self._database_uri:
             return self._database_uri
         return "{driver}://{username}:{password}@{host}:{port}/{database}".format(**self._conn)

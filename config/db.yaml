@@ -1,36 +1,14 @@
-- name: mydatabase1
-  description: Optional
-  default: Bool[Optional]
-  dialect: required. Only accepts 'mysql', 'mssql', 'postgresql', 'oracle', 'sqlite'
-  #odbc, dsn, mssql, postgre, sqlite, sqlite3, etc
-  type: sqlalchemy # Optional. Defaults to sqlalchemy. Can choose sqlalchemy or odbc. odbc can support dsn strings.
-  database_uri: Required if connection is not present
-  connection: required if connection_string not present. Not required or used with odbc.
-    host:
-    port:
-    username:
-    password:
-    options: # A dictionary with unknown keys. Pool size is an example.
-      pool_size:
-  output: dict #Optional. Controls output behavior of the top level json. Any item with multiple rows will automatically be output as a list. 
+mydatabase1:
+  description: "My Favorite DB"
+  default: True
+  dialect: mysql
+  type: sqlalchemy
+  output: dict
 
 
-- name: mydatabase2
+mysqlitedb:
+  type: sqlalchemy
   dialect: sqlite
-  path: required if dialect is sqlite.
-
-- name: mydatabase3
-  
-  default: False
-  type: odbc # This key determines the db connection type. Can be sqlalchemy, sqlite, or odbc.
-  database_uri: Null
-  dsn: Required if type is odbc.
-    
-
+  path: /path/to/sqlite.db
 
     
-
-
-
-
-

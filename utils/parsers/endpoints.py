@@ -3,7 +3,7 @@ from typing import Union, Any
 
 from flask_restx import Namespace
 
-from core.factories.templates import Endpoint
+from components.factories.templates import Endpoint
 
 
 

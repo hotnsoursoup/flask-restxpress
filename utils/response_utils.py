@@ -4,8 +4,8 @@ from typing import Any, Dict, List, Union
 
 from flask import Response, abort, jsonify, make_response
 
-from core.db import get_db
-from core.utils.format_utils import capitalize
+from components.db import get_db
+from components.utils.format_utils import capitalize
 
 
 

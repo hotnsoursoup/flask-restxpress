@@ -2,10 +2,10 @@
 from flask_restx import Namespace
 
 from sample_app.store.endpoints import customer_info1_config, orders_config
-from sample_app.api_template import ApiTemplate
+from sample_app.api_template import Endpoint
 
 
-api = Namespace('store', description='My store data')
+store_namespace = Namespace('store', description='My store data')
 """ 
 Custom function to test the app before querying / configuring DB
 """
@@ -25,14 +25,14 @@ def customFunction(db=None, **kwargs):
 # - Arguments
 ########################################################################
 
-customer_endpoint = ApiTemplate(
+customer_endpoint = Endpoint(
     api=api, 
     settings=customer_info1_config, 
     custom_function=customFunction
     )         
 customer_endpoint.load_endpoint()
 
-order_endpoint = ApiTemplate(
+order_endpoint = Endpoint(
     api=api, 
     settings=orders_config, 
     custom_function=customFunction

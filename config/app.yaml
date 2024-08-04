@@ -1,0 +1,23 @@
+
+app:
+  title: App Name
+  description: This is the description of the app
+  enable_logging: False
+  version: .01
+  server: # Optional, defaults to localhost
+  disable_auth: True #os.warning
+  use_models: False # Optional, defaults to false
+  paths_dir: #Optional, will scan on .endpoints
+  db_dir: #directory, optional, will look for in default \config
+  handlers_dir: # Optional. Defines the default path to look for functions or the basepath. 
+
+
+databases:
+  mydatabase1:
+    description: "My Favorite DB"
+    default: True
+    dialect: mysql
+    type: sqlalchemy
+    uri: mysql://username:password@localhost:3306/mydatabase1
+    output: 'dict'
+

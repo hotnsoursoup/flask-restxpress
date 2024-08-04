@@ -1,31 +1,19 @@
-- name: mydatabase1
-  description: Optional
-  default: Bool[Optional]
-  dialect: required. Only accepts 'mysql', 'mssql', 'postgresql', 'oracle', 'sqlite'
-  #odbc, dsn, mssql, postgre, sqlite, sqlite3, etc
-  type: sqlalchemy # Optional. Defaults to sqlalchemy. Can choose sqlalchemy or odbc. odbc can support dsn strings.
-  connection_string: Required if connection is not present
-  connection: required if connection_string not present. Not required or used with odbc.
-    host:
-    port:
-    username:
-    password:
-    options: # A dictionary with unknown keys. Pool size is an example.
-      pool_size:
-  output: dict #Optional. Controls output behavior of the top level json. Any item with multiple rows will automatically be output as a list. 
+app: myapp
+name: 'user'
+route: /user
+doc: optional. If you want to put in documentation.
+methods:
+  get: 
+    args:
+    handler: 'get_user' # Name of the handler function.
+    handler_path: app.user.get # Optional, will default to location of settings file.
+    doc: # Optional, for documentation.
+    error:
+    model:
+  post:
+    model:
 
 
-- name: mydatabase2
-  dialect: sqlite
-  path: required if dialect is sqlite.
-
-- name: mydatabase3
-  
-  default: False
-  type: odbc # This key determines the db connection type. Can be sqlalchemy, sqlite, or odbc.
-  connection_string: Null
-  dsn: Required if type is odbc.
-    
 
 
     
