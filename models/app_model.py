@@ -44,5 +44,11 @@ class AppConfig(BaseModel):
 
 
 def validate_app_config(config_data: dict) -> AppConfig:
-    return AppConfig(**config_data)
-
+    try:
+        return AppConfig(**config_data)
+    except ValidationError as e:
+        msg = f"Config validation error: {e}"
+        # Logger
+        raise
+    
+    

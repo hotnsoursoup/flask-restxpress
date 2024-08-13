@@ -1,5 +1,5 @@
-from typing import Dict, Optional, Union, Literal, Any
-from pydantic import BaseModel, Field, field_validator, model_validator, RootModel
+from typing import Dict, Optional, Literal, Any
+from pydantic import BaseModel, Field, model_validator, ValidationError
 
 
 import warnings
@@ -11,8 +11,8 @@ messages = {
     'invalid_connector': 'Invalid connector specified.',
     'missing_connector_with_connection_string': 'Connector must be specified with a connection string.',
     'missing_dialect': 'Dialect is missing and no connection string provided.',
-    'uri_or_settings': 'Either `uri` or `settings` must be provided for non-sqlite dialects.',
-    'uri_and_settings': 'Both `uri` and `settings` are provided. Uri will be used',
+    'uri_or_params': 'Either `uri` or `params` must be provided for non-sqlite dialects.',
+    'uri_and_params': 'Both `uri` and `params` are provided. Uri will be used',
     'sqlite_path': "`path` is required when `dialect` is `sqlite`.",
     'missing_driver': 'Driver is required when using ODBC connections.'
 }
@@ -29,7 +29,7 @@ descriptions = {
     "database_uri": """For SQL Alchemy, this can be the connection string
         or without arguments. For ODBC, this is the DSN name.""",
         
-    "database_settings": """Connection settings for the database. Host
+    "database_params": """Connection string params for the database. Host
         Username, password, etc are stored here.""",
         
     "sqlite_path": """The path to the SQLite database file.""",
@@ -42,14 +42,14 @@ descriptions = {
         of connection string parameters"""
 }
 
-class Settings(BaseModel):
+class DbParams(BaseModel):
     driver: Optional[str] = Field(description=descriptions['database_driver'])
-    host: str
+    host: Optional[str] 
     port: Optional[int]
     username: Optional[str]
     password: Optional[str]
     options: Optional[Dict[str, Any]] = Field(description=descriptions['options'])
-
+    
 
 class DatabaseConfig(BaseModel):
     """Pydantic model to validate the database configuration has the 
@@ -60,31 +60,44 @@ class DatabaseConfig(BaseModel):
     description: Optional[str] = Field(None, description="A description of the database connection.")
     default: Optional[bool] = Field(False, description=descriptions['database_default'])
     dialect: Literal['mysql', 'mssql', 'postgresql', 'oracle', 'sqlite']
-    type: Optional[Literal['sqlalchemy', 'odbc']] = Field('sqlalchemy', description=descriptions['database_type'])
+    interface: Optional[Literal['sqlalchemy', 'odbc']] = Field('sqlalchemy', description=descriptions['database_type'])
+    driver: Optional[str] = Field(description=descriptions['database_driver'])
     uri: Optional[str] = Field(None, description=descriptions['database_uri'])
-    settings: Optional[Settings] = Field(None, description=descriptions['database_settings'])
+    params: Optional[DbParams] = Field(None, description=descriptions['database_params'])
+    auto_commit: Optional[bool] = Field(False, description="Automatically commit transactions.")
     path: Optional[str] = Field(None, description=descriptions['sqlite_path'])
-    output: Optional[str] = Field(None, description="The output format for the database connection.")
+    output: Optional[str] = Field(None, description="The outp   ut format for the database connection.")
 
     @model_validator(mode='before')
     def check_dialect_requirements(cls, values):
         dialect = values.get('dialect')
-        _type = values.get('type')
+        interface = values.get('interface')
+        uri = values.get('uri')
+        params = values.get('params')
         
+        # Check for driver. Driver can be present in 2 locations.
+        driver = values.get('driver')
+        if not driver:
+            driver = params.get('driver') if params else None
+        
+        # sqlite requires a path
         if dialect == 'sqlite':
             if not values.get('path'):
                 raise ValueError(messages['sqlite_path'])
         else:
-            if not (values.get('uri') or values.get('settings')):
-                raise ValueError(messages['uri_or_settings'])
-            if values.get('uri') and values.get('settings'):
-                warnings.warn(messages['uri_and_settings'])
-        if _type == 'odbc' and not values.get('driver'):
+            if not (uri or params):
+                raise ValueError(messages['uri_or_params'])
+            if uri and params:
+                warnings.warn(messages['uri_and_params'])
+        if interface == 'odbc' and not driver:
             raise ValueError(messages['missing_driver'])
         return values
-
-
     
 def validate_db_config(config_data: dict) -> DatabaseConfig:
-    return DatabaseConfig(**config_data)
-
+    try:
+        return DatabaseConfig(**config_data)
+    except ValidationError as e:
+        msg = f"Config validation error: {e}"
+        # Logger
+        raise
+    

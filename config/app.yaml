@@ -11,7 +11,6 @@ app:
   db_dir: #directory, optional, will look for in default \config
   handlers_dir: # Optional. Defines the default path to look for functions or the basepath. 
 
-
 databases:
   mydatabase1:
     description: "My Favorite DB"
@@ -20,4 +19,36 @@ databases:
     type: sqlalchemy
     uri: mysql://username:password@localhost:3306/mydatabase1
     output: 'dict'
+
+logging:
+  defaults:
+    verbose_level: 1
+    log_level: error
+    log_fmt: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    file_handler:
+      log_file: /var/log/app.log
+      log_fmt: # If different from root default
+      log_level: error
+    console_handler:
+      log_fmt:
+      log_level: error
+    db_handler:
+      db_name: mydatabase1
+      table_name:
+      table_schema: log
+      verbose_level:
+      log_level:
+      fallback_handler: file_handler
+  debugger:
+    db_name: mydatabase1
+    log_file:
+    verbose_level:
+    log_level:
+    stdout: True
+  error:
+    db_name: mydatabase1
+    log_file:
+    verbose_level:
+    log_level:
+  
 

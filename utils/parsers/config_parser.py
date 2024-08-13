@@ -1,24 +1,17 @@
 import os
 import warnings
-from flask import current_app as app
 from pyaml_env import parse_config
 
+# Retrieve all the valid keys for Flask.
+_directory = "config"
 
-# Retrieve all the valid keys for flask.
-
-_directory = r"\config"
-
-def parse_yaml_files():
+def parse_yaml_files(app, directory=None):
     """Recursively parses YAML files for flask app configurations to support
     separate configs for different purposes. eg db_config.yaml, app_config.yaml
     
     :param directory: config main directory. Defaults to ROOT/config
     :type directory: str, os.PathLike[str] 
-    :param validate_flask_keys: _description_
-    :type validate_flask_keys: _type_
     """ 
-    
-    
     directory = directory if directory else _directory
     
     for filename in os.listdir(directory):
@@ -31,38 +24,28 @@ def parse_yaml_files():
                 # Loads the app config first.
                 if 'app' in config:
                     app.config.update(config['app'])
-                elif filepath == 'app.yaml' or filepath == 'app.yml':
+                elif filename in ['app.yaml', 'app.yml']:
                     app.config.update(config)
                 
                 # Add the db config to the app.config
-                if filepath == 'db.yaml' or filepath == 'db.yml':
-                    set_db(config)
+                if filename in ['db.yaml', 'db.yml']:
+                    app.config['db'].update(config)
                 elif 'db' in config:
-                    set_db(config.pop('db'))
+                    app.config['db'].update(config['db'])
                 
             except Exception as e: 
                 print(f"Error parsing {filepath}: {e}")
 
         elif os.path.isdir(filepath):
-            parse_yaml_files(filepath)  # Recursive call
+            parse_yaml_files(app=app, directory=filepath)  # Recursive call with correct directory
 
-
-def get_config():
-    """Will check if a user has established as config directory before parsing the config files 
-    in the default directory
+def update_config(app):
+    """Will check if a user has established a config directory before parsing the config files 
+    in the default directory.
     """
+    app.config['db'] = {}
+    
     if 'config_dir' in app.config:
-        parse_config(app.config['config_dir'])
+        parse_yaml_files(app=app, directory=app.config['config_dir'])
     else:
-        parse_config()
-
-def set_db(config: dict):
-    "Utilize if you want to warn if multiple database entries are found" \
-        "otherwise last entry"
-    with app.app_context():
-        if not app.config['database']:
-            app.config['db'] = config
-        else:
-            warnings.warn('There are duplicate entries for database. '
-                        'Please check your config files.')
-        
+        parse_yaml_files(app=app)

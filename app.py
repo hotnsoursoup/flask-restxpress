@@ -1,5 +1,6 @@
 from flask import Flask
-from components.parsers.config_parser import parse_config
+from utils.parsers.config_parser import update_config
+
 
 def createApp():
 
@@ -7,7 +8,12 @@ def createApp():
     
     with app.app_context():
         
+        update_config(app)
         
-        ""
-
-    return app
+        print(app.config['db'])
+        
+        print(app.config)
+        
+    
+    
+createApp()

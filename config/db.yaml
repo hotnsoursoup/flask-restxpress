@@ -2,13 +2,24 @@ mydatabase1:
   description: "My Favorite DB"
   default: True
   dialect: mysql
-  type: sqlalchemy
-  output: dict
-
-
-mysqlitedb:
-  type: sqlalchemy
-  dialect: sqlite
-  path: /path/to/sqlite.db
-
+  interface: sqlalchemy
+  uri: mysql://username:password@localhost:3306/mydatabase1
+  settings:
+    orm: True
+    auto_commit: False
+    auto_page_size: 0
+    one_row_output: dict
+    auto_commit: True
     
+description: "My Favorite DB"
+default: True
+dialect: mysql
+type: sqlalchemy
+output: dict
+uri: mysql://username:password@localhost:3306/mydatabase1
+settings:
+  session: True
+  orm: True
+  auto_commit: False
+  
+mysqlitedb:
