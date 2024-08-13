@@ -42,38 +42,37 @@ error_messages = {
 
 
 def set_defaults(config: dict):
-    # Set the default db name for the class if one is desginated.
-    default_db_name = get_default_db(config)
-    BaseDB.default_db_name = default_db_name
-    BaseDB.default_type = config[default_db_name].get('type')
+    "Assigns the default database to the class. This func will be moved."
+    BaseDB.default_config = get_default_db_config(config)
     
 
-def get_default_db(self, config: dict) -> Union[bool, str]:
+def get_default_db_config(self, config: dict) -> Union[bool, str]:
     """
     Returns the default database configuration from the 
     configuration file. We rely on the config model validation
     to ensure there is only one default db if there is one provided.
-    
+    If there is none defined, we choose the first one.
     
     :param config: configuration dictionary for the database
     :type config: dict
     """
     
     for db_name, config in config.items():
-        if config.get('default') == True:
-            self.default_db_name = db_name
+        if config[db_name].get('default') == True:
+            return config
     return next(iter(config.items()))
 
 class BaseDB(ABC):
-    "We set the default db to be called if a named db is not called."
-    default_db_name = None
+    "Default database configuration used when one is not defined"
+    default_config = None
     
     "Default references if one is not provided."
     _orm = False
     _auto_page = False
     
     def __init__(self, 
-        config: dict, name=None,
+        config: dict=None, 
+        name: str=None,
         methods: Dict[str, Callable] = None
         ):
         """
@@ -86,6 +85,7 @@ class BaseDB(ABC):
         :param name: dictionary key for the db config being looked up
         :type name: str
         """
+
         try:
             config = config if config else app.config['db']
         except KeyError:
@@ -101,7 +101,7 @@ class BaseDB(ABC):
         
         # Assigns the selected config to class instance
         self.config = config['name']
-        
+
         # Pyndantic model validation to ensure config is correct
         validate_db_config(self.config)
 
@@ -133,7 +133,14 @@ class BaseDB(ABC):
     def __repr__(self):
         return f"{self.__class__.__name__}({self.config})"
 
-            
+    def configure_default_config(self, config, name):
+                
+        if config is None and name is not None:
+            config = app.config['db']
+        elif self.default_config:
+            config = self.default_config
+        
+    
     def register_instance_methods(self, methods: Dict[str, Callable]):
         "Registers instance methods"
         methods = self.allowed_methods(methods)
@@ -279,12 +286,14 @@ class BaseDB(ABC):
     def connect(self) -> Any:
         """Connects to the database. Must be implemented by subclasses."""
     
-    @abstractmethod
     def execute(
         self, sql: str, 
         params: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
-        """Abstract method to be implemented by subclasses to execute the query and fetch results."""
+        "Should be implemented by the subclass"
+        return self.conn.execute(sql, params)
+        
+        
         
     def _read_sql_file(self):
         "For processing .sql files"
