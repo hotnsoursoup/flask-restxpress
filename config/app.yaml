@@ -22,11 +22,12 @@ databases:
 
 logging:
   defaults:
-    verbose_level: 1
+    debug: True
     log_level: error
     log_fmt: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     file_handler:
-      log_file: /var/log/app.log
+      base_name: app.log
+      log_file: /var/log/$basename
       log_fmt: # If different from root default
       log_level: error
     console_handler:

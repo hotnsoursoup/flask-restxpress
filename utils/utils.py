@@ -1,5 +1,4 @@
-from glom import glom, T, Iter
-from typing import Any, Union
+import warnings
 
 def get_dict_value(key: str, dictionary: dict, default_value: str = ''):
     "Retrieve dictionary values with the existence of tuples as keys"
@@ -13,34 +12,11 @@ def get_dict_value(key: str, dictionary: dict, default_value: str = ''):
     else:
         return default_value
 
-def cleandict(dictionary: dict) -> dict:
-    '''
-    Removes None values from the dictionary.
-    '''
 
-    # if a list, clean each item in the list
-    if isinstance(dictionary, list):
-        return [cleandict(item) for item in dictionary]
+def flatten_str(message: str) -> str:
+    "Removes line breaks and excess spaces from the string"
+    return ' '.join(message.split())
 
-    # if not a dictionary or a tuple, just return it
-    if not isinstance(dictionary, dict):
-        return dictionary
-
-    return dict((key, cleandict(val))
-                for key, val in dictionary.items() if val is not None)
-    
-
-
-# Custom filter function to remove empty values
-def is_not_empty(value: Any) -> bool:
-    return value not in ('', ' ', None, [], {})
-
-# Function to recursively remove empty values
-def remove_empty_values(data: Union[dict, list]) -> Union[dict, list]:
-    spec = (
-        T,
-        Iter().filter(is_not_empty).map(
-            lambda x: remove_empty_values(x) if isinstance(x, (dict, list)) else x
-        ).all()
-    )
-    return glom(data, spec)
+def warn(message: str) -> str:
+    "Flattens input string and issues warning"
+    warnings.warn(flatten_str(message), stacklevel=3)

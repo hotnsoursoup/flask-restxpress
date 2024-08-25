@@ -1,8 +1,16 @@
-from typing import Dict, Optional, Literal, Any
-from pydantic import BaseModel, Field, model_validator, ValidationError
+from typing import Dict
+from typing import Optional
+from typing import Literal
+from typing import Any
+from typing import Union
+from pydantic import BaseModel
+from pydantic import Field
+from pydantic import model_validator
+from pydantic import ValidationError
+from pydantic import RootModel
 
+from utils.utils import warn
 
-import warnings
 
 
 # Error and warning messages
@@ -14,7 +22,8 @@ messages = {
     'uri_or_params': 'Either `uri` or `params` must be provided for non-sqlite dialects.',
     'uri_and_params': 'Both `uri` and `params` are provided. Uri will be used',
     'sqlite_path': "`path` is required when `dialect` is `sqlite`.",
-    'missing_driver': 'Driver is required when using ODBC connections.'
+    'missing_driver': 'Driver is required when using ODBC connections.',
+    'invalid_model': "Invalid model. Choices are `single`, `multi`, and `all`."
 }
 
 
@@ -42,16 +51,14 @@ descriptions = {
         of connection string parameters"""
 }
 
-class DbParams(BaseModel):
+class ConnectionParams(BaseModel):
     driver: Optional[str] = Field(description=descriptions['database_driver'])
     host: Optional[str] 
     port: Optional[int]
     username: Optional[str]
     password: Optional[str]
-    options: Optional[Dict[str, Any]] = Field(description=descriptions['options'])
-    
-
-class DatabaseConfig(BaseModel):
+    options: Optional[Dict[str, str]] = Field(description=descriptions['options'])
+class DatabaseModel(BaseModel):
     """Pydantic model to validate the database configuration has the 
     necessary information to connect to a database.
     
@@ -61,12 +68,12 @@ class DatabaseConfig(BaseModel):
     default: Optional[bool] = Field(False, description=descriptions['database_default'])
     dialect: Literal['mysql', 'mssql', 'postgresql', 'oracle', 'sqlite']
     interface: Optional[Literal['sqlalchemy', 'odbc']] = Field('sqlalchemy', description=descriptions['database_type'])
-    driver: Optional[str] = Field(description=descriptions['database_driver'])
+    driver: Optional[str] = Field(None, description=descriptions['database_driver'])
     uri: Optional[str] = Field(None, description=descriptions['database_uri'])
-    params: Optional[DbParams] = Field(None, description=descriptions['database_params'])
+    connection_params: Optional[ConnectionParams] = Field(None, description=descriptions['database_params'])
     auto_commit: Optional[bool] = Field(False, description="Automatically commit transactions.")
     path: Optional[str] = Field(None, description=descriptions['sqlite_path'])
-    output: Optional[str] = Field(None, description="The outp   ut format for the database connection.")
+    output: Optional[str] = Field(None, description="The output format for the database connection.")
 
     @model_validator(mode='before')
     def check_dialect_requirements(cls, values):
@@ -88,16 +95,58 @@ class DatabaseConfig(BaseModel):
             if not (uri or params):
                 raise ValueError(messages['uri_or_params'])
             if uri and params:
-                warnings.warn(messages['uri_and_params'])
+                warn(messages['uri_and_params'])
         if interface == 'odbc' and not driver:
             raise ValueError(messages['missing_driver'])
         return values
+
+class MultiDatabaseModel(RootModel[Dict[str, DatabaseModel]]):
+    pass
+
+
+def validate_db_model(
+    db_config: dict[str, Any], 
+    model: Literal["single", "multi", "all"] = "single",
+    return_model: bool = False
+) -> Union[bool, Union[DatabaseModel, MultiDatabaseModel]]:
+    """
+    Validate the database configuration dictionary with the given 
+    database model. 
     
-def validate_db_config(config_data: dict) -> DatabaseConfig:
-    try:
-        return DatabaseConfig(**config_data)
-    except ValidationError as e:
-        msg = f"Config validation error: {e}"
-        # Logger
-        raise
+    :param dict db_config: The database configuration dictionary
+    :param str model: 
+    :param bool return_model: If True, the matching model will be returned.
+        The default behavior will be a boolean to see if the model matches
+        either model or checks against both models with "all" on "model" param.
+    :return bool: True if config matches model
+    """
+    models = {
+        "single": DatabaseModel,
+        "multi": MultiDatabaseModel
+    }
+
+    def validate_and_return(model_class):
+        try:
+            model_class.model_validate(db_config)
+            return model_class if return_model else True
+        except ValidationError:
+            return False
     
+    # In case a user is importing the database config from within the app
+    # config directly. We need to extract just the database configuration.
+    if len(db_config) == 1 and 'db' in db_config.keys():
+        db_config = db_config['db']
+    
+    # Checks against both models.
+    if model == "all":
+        for model_class in models.values():
+            if validate_and_return(model_class):
+                return validate_and_return(model_class)
+        return False
+    # Checks against a single database
+    else:
+
+        try:
+            return validate_and_return(models[model])
+        except ValueError:
+            raise(messages['invalid_model'])

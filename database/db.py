@@ -41,10 +41,6 @@ error_messages = {
 }
 
 
-def set_defaults(config: dict):
-    "Assigns the default database to the class. This func will be moved."
-    BaseDB.default_config = get_default_db_config(config)
-    
 
 def get_default_db_config(self, config: dict) -> Union[bool, str]:
     """
@@ -57,17 +53,33 @@ def get_default_db_config(self, config: dict) -> Union[bool, str]:
     :type config: dict
     """
     
-    for db_name, config in config.items():
-        if config[db_name].get('default') == True:
-            return config
+    if validate_db_config(config):
+        return config
+    elif validate_db_config(config.values):
+        return config.values()
+    else:
+        for db_name, config in config.items():
+            if config[db_name].get('default') == True:
+                return config
+            
+    # Otherwise just grab the first one.
     return next(iter(config.items()))
 
-class BaseDB(ABC):
-    "Default database configuration used when one is not defined"
+class BaseDatabaseModel(ABC):
+    """
+    Default database configuration used when one is not defined. This
+    is more for use when you have multiple database configurations.
+    """
+    
     default_config = None
     
-    "Default references if one is not provided."
+    """
+    ORM support is not currently available, but is in consideration for
+    future releases
+    """
     _orm = False
+    
+    "Automatic paging of results across all subclasses"
     _auto_page = False
     
     def __init__(self, 
@@ -75,35 +87,102 @@ class BaseDB(ABC):
         name: str=None,
         methods: Dict[str, Callable] = None
         ):
+        """      
+        The BaseDatabaseConfig class serves as an abstract base class that 
+        provides a standardized configuration framework for connecting to 
+        various database systems. 
+        
+        Key Features:
+        
+        SqlAlchemy engine via config.
+            The configuration will generate the uri, add engine options,
+            and create/manage the connection.
+            
+        Better raw sql support.
+            Raw sql is not the recommended implementation, nor is stored
+            procedure, but there may be use cases. This class allows for
+            sql query and parameter construction, sorting, pagination, 
+            error handling, and more. 
+            
+            Subclass and use execute. Within execute, call self._execute
+            
+            class MyDbClass(BaseDatabaseModel):
+            
+            def connect(self):
+                
+                my_connection = #Your connection method here
+                
+                self.conn = my_connection
+
+                return self.conn
+                
+            def execute(self, sql, params):
+                
+                #do things
+                
+                self._execute(sql, params)
+                
+
+        Stored procedure execution by name.
+            The stored procedure logic will generate a procedure based 
+            on dialect of the database. Note, you may have to prefix 
+            your stored procedure with your database (e.g. dbo.my_procedure)
+        
+            MySubClass.execute_stored_procedure(name, params)
+        
+        sort: 
+            Sort logic can be applied by subclass and defining sort
+            
+        pagination: 
+            Will page results based on page size. You can set automatic
+            paging for all routes through the configuration including
+            the default behavior. Paging for separate routes can be
+            configured within the route configuration.
+            
+            For global sort settings in config, see example below.
+            0 or no setting defined will mean its disabled. Route
+            definitions will override these. See documentation for more
+            details.
+
+            This will paginate for every 20 results if the total results
+            exceed 30.
+            
+            settings:
+                paging:
+                    auto_page_size: 20
+                    min_page_size: 30
+            ------------------------------------------------------------
+            
+            
+
+
+        :param dict config: The database configuration
+        :param str name: The name (key) of the db to be used
+        :param methods Dict[str, Callable] methods: A dictionary of methods
+            you want to register to the instance class. Object class
+            registrations have to be called explicitly. 
+            --> objclass.register_class_methods(methods)
+            
         """
-        Base database object. Provides basic structure and functionality
-        for different databases/interfaces. Current version has a focus
-        on raw sql queries and stored procedures.
+        # Legacy implementation, will delete.
+        # try:
+        #     config = config if config else app.config['db']
+        # except KeyError:
+        #     raise KeyError(error_messages['missing_db_config'])
 
-        :param config: configuration dictionary for the database
-        :type config: dict
-        :param name: dictionary key for the db config being looked up
-        :type name: str
-        """
-
-        try:
-            config = config if config else app.config['db']
-        except KeyError:
-            raise KeyError(error_messages['missing_db_config'])
-
-        # Set the default class variables for name and type if not set in case
-        # the class has those variables cleared or instantiated through handler
+        # # Set the default class variables for name and type if not set in case
+        # # the class has those variables cleared or instantiated through handler
         
-        if not self.default_db_name:
-            set_defaults(config)
+        # if not self.default_db_name:
+        #     set_defaults(config)
         
-        name = name if name else self.default_db_name
+        # name = name if name else self.default_db_name
         
-        # Assigns the selected config to class instance
-        self.config = config['name']
-
+        # # Assigns the selected config to class instance
+        # self.config = config['name']
+        
         # Pyndantic model validation to ensure config is correct
-        validate_db_config(self.config)
+        validate_db_config(config)
 
         # Optional, Register methods to the class. We only process instance
         # methods for the init. Class instance methods should be handled
@@ -118,7 +197,7 @@ class BaseDB(ABC):
         self._path = config.get('path')
         self._params = config.get('params')
         self._uri = config.get('uri')
-        
+        self.settings = config.get('settings')
         
         # Output controls
         self._auto_sort = config.get('auto_sort', self._auto_sort)
@@ -133,7 +212,7 @@ class BaseDB(ABC):
     def __repr__(self):
         return f"{self.__class__.__name__}({self.config})"
 
-    def configure_default_config(self, config, name):
+    def set_default_config(self, config, name):
                 
         if config is None and name is not None:
             config = app.config['db']
@@ -164,11 +243,7 @@ class BaseDB(ABC):
         "Add-in logic if you want to only allow specific methods to be registered"
         
         return methods
-        
-    # @abstractmethod
-    # def close(self):
-    #     "Closes the database connection. Must be implemented by subclasses."
-        
+    
     def call_stored_procedure(
         self,
         procedure_name: str, 
@@ -214,7 +289,7 @@ class BaseDB(ABC):
         self, 
         sql: str, 
         params:  Union[Dict[str, Any], Tuple[str], None] = None
-    ) -> Union[List[Dict[str, Any], Dict[str]]]:
+    ) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
         """Execute SQL queries and returns the results.
 
         Args:
@@ -222,12 +297,14 @@ class BaseDB(ABC):
             params (Union[Dict[str, Any], Tuple[str], None]): The parameters to 
                 send with the sql query for a formatted string or a stored 
                 procedure. Defaults to None. 
-            single_row_as_dict (bool, optional): _description_. Defaults to True.
-
         Returns:
-            Union[List[Dict[str, Any], Dict[str]]]: Will return a list of
-                dictionaries if there is more than 1 row. Can return either
-                a dictionary or list depending on the single_row_as_dict argument.
+            Union[List[Dict[str, Any]], Dict[str, Any]]: Will return a list of
+                dictionaries if there is more than 1 row. If there is only
+                1 row, the result can be returned as a dictionary or a list
+                depending on the one_row_output setting in the config.
+                
+                settings:
+                  one_row_output: dict
         """
         try:
             if not self.conn:
@@ -236,24 +313,27 @@ class BaseDB(ABC):
             # Add paging logic
             query = self._page(sql)
             
-            result = self._error_handler(self.execute(query, params))
+            result = self.execute(query, params)
             
             self.commit()
-            
+        
         except Exception as e:
-            # More modifications to be made for error handling
-            #self.logger.error
             self.rollback()
+            self._error_handler(e)
             
-            print(f"An error occurred while executing the query. Details: {e}")
-            raise
         # Any post query processing
         return self.process_result(result)
     
 
     def close(self):
-        "Closes the database connection/session"
-        return self.conn.close() if self.conn else None
+        """
+        Handles the closing of the connection. Subclass and override 
+        if conn.close() is not supported by the connector
+        """
+        if self.conn:
+            self.conn.close()
+            self.conn = None
+
     
     def rollback(self):
         return self.conn.rollback()
@@ -269,17 +349,22 @@ class BaseDB(ABC):
         return data
     
     def _page(self, sql):
-        return self._sort(sql) if is_stored_procedure(sql) else sql
+        return self._sort(sql) if is_stored_procedure(sql) else self.page(sql)
     
-    def _sort(self, sql):
+    def page(self, sql):
+        
+        
+    def sort(self, sql):
+        "Override this if you want to provide sorting logic."
         return sql
         
-    def _error_handler(self, data: dict) -> dict:
-        "Function to handle errors from execution"
+    def error_handler(self, data: dict) -> dict:
+        "Function to handle errors from execution. Implement as necessary"
         return data
     
     @classmethod
     def set_auto_page_size(self, page_size):
+        "A class method to set the page size for all class instances"
         self.auto_page_size = page_size
         
     @abstractmethod
@@ -293,8 +378,6 @@ class BaseDB(ABC):
         "Should be implemented by the subclass"
         return self.conn.execute(sql, params)
         
-        
-        
     def _read_sql_file(self):
         "For processing .sql files"
         
@@ -302,22 +385,23 @@ class BaseDB(ABC):
         # To be built
         
 
-class SqAlchemyConn(BaseDB):
-    "A default class for database connections using SqlAlchemy"
+class SqAlchemyConnection(BaseDatabaseModel):
     def __init__(self, config=None, name=None):
         """
-        Creates a database connection from a database configuration
+        Creates a SqlAlchmyDatabase object from a configuration file
+        that will provide base functionality to connect to and query
+        a database using raw sql queries and stored procedures.
+        
+        ORM support will be in future releases.
+        
 
-        :param config: database configuration
-        :type config: dict
-        :param name: key name for the db being called. defaults to None
-        :type name: str, optional
+        :param _type_ config: _description_, defaults to None
+        :param _type_ name: _description_, defaults to None
         """
         
         try:
             # Read and set connection parameters
             super().__init__(config, name=name)
-
             
         except KeyError as e:
             raise("Please check your configuration file for a valid database entry.")
@@ -343,7 +427,7 @@ class SqAlchemyConn(BaseDB):
     
     def execute(self, sql: str, params: Dict = None) -> Dict | List: 
         
-        result = self.conn.execute(text(sql), params)
+        result = self._execute(text(sql), params)
         
         rows = result.fetchall()
         
@@ -352,99 +436,15 @@ class SqAlchemyConn(BaseDB):
         return result
     
     def connect(self):
-        "Opens the connection as a session"
+        """
+        Opens the connection as a session. The connection is then
+        returned, but also accessible as conn. 
+        """
         if self.conn is not None:
             return self.conn
-        try:
-            self.conn = scoped_session(sessionmaker(bind=self.engine))
-            return self.conn
-        except OperationalError as e:
-            #self.logger.error
-            self.conn = None
-        except SQLAlchemyError as e:
-            print(f"SQLAlchemy error: An error occurred. Details: {e}")
-            self.conn = None
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-            self.conn = None
-        finally:
-            self.close
-    
         
-
-
-################ DEPRECATED #######################
-###################################################
-class OdbcConn(BaseDB):
-    def __init__(self, config=None, name=None):
-        """ DEPRECATED
-        Creates a basic database connection from a database configuration 
-        for ODBC connections. Supports DSN connections. 
-
-        :param config: database configuration
-        :type config: dict
-        :param name: key name for the db being called. defaults to None
-        :type name: str,
-        """
-        # Set using the db config assigned to app if none is provided.
-        
-        try:
-            # Read and set connection parameters
-            super().__init__(config, name=name)
-                    
-        except KeyError as e:
-            raise(error_messages['key_error'])
-    
-        self._raw = True
-        
-    def connect(self):
-    # Connects to the DB via odbc using the connection string.
-    # We return the object and assign itself the connection to provide
-    # 2 methods to access the connection
-        self.conn = pyodbc.connect(self._uri)
+        self.conn = scoped_session(sessionmaker(bind=self.engine))
         return self.conn
-
-    @property
-    def uri(self):
-        
-        # Return the connection string if already present
-        if self._uri:
-            return self._uri
-            
-        driver = self.params.get('driver')
-        connection_str = [f"DRIVER={{{driver}}}"]
-        
-        try:
-            for key, value in self.params.items():
-                if isinstance(value, bool):
-                    value = 'yes' if value else 'no'
-                    connection_str.append(f"{key.upper()}={value}")
-        except KeyError as e:
-            raise(error_messages['key_error'])
-        
-        return connection_str
-    
-    def _execute(self, sql: str, params: Dict = None) -> Dict | List: 
-        
-        cursor = self.conn.cursor()
-        cursor.execute(sql, params or {})
-        
-        # Fetch all rows
-        rows = cursor.fetchall()
-
-        # Get column names
-        columns = [column[0] for column in cursor.description]
-
-        # Convert rows into a list of dictionaries
-        results = [dict(zip(columns, row)) for row in rows]
-
-        return results
-    
-dbclass = {
-    "odbc": OdbcConn,
-    "sqlalchemy": SqAlchemyConn
-}
-
 
 
 def get_db(config: dict, name: str=None):
@@ -460,45 +460,4 @@ def get_db(config: dict, name: str=None):
         else:
             config = next(iter(config.items()))   
 
-def get_type(name: str=None):
-    
-    if name:
-        return app.config['db'][name].get('type')
-    
-    name = BaseDB.default_db_name
-    
-    return app.config['db'][name].get('type')
 
-
-@app.before_request
-def _get_session():
-    return get_session()
-
-def get_session(name=None):
-    if 'db' not in g:
-        db_type = get_type(name)
-        db_class = dbclass.get(db_type)
-        if db_class:
-            g.db = db_class(config=app.config['db'], name=name)
-            g.db.connect()  # Ensure the connection is established
-        else:
-            raise ValueError(error_messages['invalid_connector'])
-    return g.db
-
-@app.teardown_appcontext
-def teardown_db(exception=None):
-    # Removes the db connection and closes it when the request is complete
-    db = g.pop('db', None)
-    if db is not None:
-        db.conn.close()
-    
-def set_flask_db(config: dict):
-    "Utilize if you want to warn if multiple database entries are found" \
-        "otherwise last entry"
-    with app.app_context():
-        if not app.config['database']:
-            app.config['db'] = config
-        else:
-            warnings.warn('There are duplicate entries for database. '
-                        'Please check your config files.')
-        
