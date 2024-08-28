@@ -29,26 +29,38 @@ messages = {
 
 # Field descriptions
 descriptions = {
-    "database_type": """The type of database connection. Can be ODBC 
-        or SQLAlchemy. Defaults to SQLAlchemy.""",
+    "database_default": 
+        """
+        Used when identifying the default database loaded 
+        used by all connections without an explicitly defined DB
+        """,
+        
+    "database_uri": 
+        """
+        For SQL Alchemy, this can be the connection string
+        or without arguments. For ODBC, this is the DSN name.
+        """,
+        
+    "database_params": 
+        """
+        Connection string params such as host, username, password, etc 
+        are stored here.for the database. 
+        """,
+        
+    "sqlite_path": "The path to the SQLite database file.",
     
-    "database_default": """Used when identifying the default database loaded 
-        used by all connections without an explicitly defined DB""",
+    "database_driver": 
+        """
+        The driver to use with the connection. Driver definition may 
+        vary between dialects and if odbc support is enabled.
+        """,
         
-    "database_uri": """For SQL Alchemy, this can be the connection string
-        or without arguments. For ODBC, this is the DSN name.""",
-        
-    "database_params": """Connection string params for the database. Host
-        Username, password, etc are stored here.""",
-        
-    "sqlite_path": """The path to the SQLite database file.""",
+    "options": 
+        """
+        A dictionary of options to send to create_engine(). 
+        """,
     
-    "database_driver": """The driver to use for ODBC connections or 
-        driver for sqlalchemy connections.""",
-        
-    "options": """A dictionary of keyword args to send to create_engine()
-        if using sqlalchemy (default), or for odbc connections, a dictionary
-        of connection string parameters"""
+    "use_odbc": "Enable the ODBC support."
 }
 
 class ConnectionParams(BaseModel):
@@ -58,6 +70,7 @@ class ConnectionParams(BaseModel):
     username: Optional[str]
     password: Optional[str]
     options: Optional[Dict[str, str]] = Field(description=descriptions['options'])
+    
 class DatabaseModel(BaseModel):
     """Pydantic model to validate the database configuration has the 
     necessary information to connect to a database.
@@ -67,7 +80,7 @@ class DatabaseModel(BaseModel):
     description: Optional[str] = Field(None, description="A description of the database connection.")
     default: Optional[bool] = Field(False, description=descriptions['database_default'])
     dialect: Literal['mysql', 'mssql', 'postgresql', 'oracle', 'sqlite']
-    interface: Optional[Literal['sqlalchemy', 'odbc']] = Field('sqlalchemy', description=descriptions['database_type'])
+    use_odbc: Optional[bool] = Field(False, description=descriptions['use_odbc'])
     driver: Optional[str] = Field(None, description=descriptions['database_driver'])
     uri: Optional[str] = Field(None, description=descriptions['database_uri'])
     connection_params: Optional[ConnectionParams] = Field(None, description=descriptions['database_params'])
@@ -75,15 +88,16 @@ class DatabaseModel(BaseModel):
     path: Optional[str] = Field(None, description=descriptions['sqlite_path'])
     output: Optional[str] = Field(None, description="The output format for the database connection.")
 
-    @model_validator(mode='before')
+    
+    @model_validator(mode='after')
     def check_dialect_requirements(cls, values):
         dialect = values.get('dialect')
-        interface = values.get('interface')
         uri = values.get('uri')
         params = values.get('params')
-        
+        use_odbc = values.get('use_odbc')
         # Check for driver. Driver can be present in 2 locations.
         driver = values.get('driver')
+        
         if not driver:
             driver = params.get('driver') if params else None
         
@@ -96,11 +110,23 @@ class DatabaseModel(BaseModel):
                 raise ValueError(messages['uri_or_params'])
             if uri and params:
                 warn(messages['uri_and_params'])
-        if interface == 'odbc' and not driver:
+        if use_odbc and not driver:
             raise ValueError(messages['missing_driver'])
         return values
 
 class MultiDatabaseModel(RootModel[Dict[str, DatabaseModel]]):
+    """
+    Model for multidatabase configurations. Conifigurations that
+    are defined with a root key (database name) and only have 1 value
+    will pass validation.
+    
+    e.g.
+    
+    mydatabase1:
+      dialect: mysql
+      uri: mysql://user:pass
+      
+    """
     pass
 
 
@@ -120,11 +146,12 @@ def validate_db_model(
         either model or checks against both models with "all" on "model" param.
     :return bool: True if config matches model
     """
+    
     models = {
         "single": DatabaseModel,
         "multi": MultiDatabaseModel
     }
-
+    
     def validate_and_return(model_class):
         try:
             model_class.model_validate(db_config)
@@ -134,8 +161,7 @@ def validate_db_model(
     
     # In case a user is importing the database config from within the app
     # config directly. We need to extract just the database configuration.
-    if len(db_config) == 1 and 'db' in db_config.keys():
-        db_config = db_config['db']
+    db_config = get_nested_config(db_config)
     
     # Checks against both models.
     if model == "all":
@@ -150,3 +176,17 @@ def validate_db_model(
             return validate_and_return(models[model])
         except ValueError:
             raise(messages['invalid_model'])
+        
+    
+def get_nested_config(config: dict) -> dict:
+    """
+    Retrieves nested database configurations
+
+    :param _type_ config: The root database configuration
+    :return dict: 
+    """
+    
+    if 'db' in config.keys():
+        config = config['db']
+    
+    return next(iter(config.items())) if len(config) == 1 else config
