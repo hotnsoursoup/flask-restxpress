@@ -1,7 +1,11 @@
 import re
 import string
-from glom import glom, T, Iter
-from typing import Any, Union
+from typing import Any
+from typing import Union
+
+from glom import Iter
+from glom import T
+from glom import glom
 
 
 def clean_data(data, lowercase=False):

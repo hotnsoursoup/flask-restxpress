@@ -1,9 +1,8 @@
-from models.db_model import DatabaseModel, MultiDatabaseModel
-from flask import g
 from flask import current_app as app
+from flask import g
 
-
-
+from models.db_model import DatabaseModel
+from models.db_model import MultiDatabaseModel
 
 
 def get_flask_db(config: dict=None, name: str=None):
