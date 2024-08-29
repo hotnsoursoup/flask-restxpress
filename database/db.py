@@ -1,20 +1,26 @@
-import pyodbc
-import warnings
 from abc import ABC
 from abc import abstractmethod
-from typing import Dict, Any, Optional, Union, List, Tuple, Callable
+from typing import Any
+from typing import Callable
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Tuple
+from typing import Union
 
 from flask import current_app as app
-from flask import g
-from models.db_model import validate_db_config
-from .db_utils import is_stored_procedure
-from .db_utils import has_sorting
+from pydantic import ValidationError
+
 from sqlalchemy import create_engine
 from sqlalchemy import text
-from sqlalchemy.exc import OperationalError
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import scoped_session
 from sqlalchemy.orm import sessionmaker
+
+from models.db_model import validate_db_config
+from models.db_model import get_nested_config
+
+from .db_utils import has_sorting
+from .db_utils import is_stored_procedure
 
 
 # Supported database drivers
@@ -37,7 +43,8 @@ error_messages = {
     "named_db_not_found": "The named database configuration was not found in the configuration file.",
     "operational_error:": "Operational error: Failed to connect to the database. Details: {}",
     "unsupported_dialect": "The database dialect is not supported. Please refer to documentation for supported dialects.",
-    "key_error": "Please check your configuration file for a valid database entry."
+    "key_error": "Please check your configuration file for a valid database entry.",
+    "validation_error": "The config does not match the model. Please refer to wiki."
 }
 
 
@@ -74,8 +81,7 @@ class BaseDatabaseModel(ABC):
     default_config = None
     
     """
-    ORM support is not currently available, but is in consideration for
-    future releases
+    ORM support is not currently available, but is in roadmap.
     """
     _orm = False
     
@@ -182,12 +188,18 @@ class BaseDatabaseModel(ABC):
         # self.config = config['name']
         
         # Pyndantic model validation to ensure config is correct
-        validate_db_config(config)
-
+        if validate_db_config(config):
+            config = get_nested_config(config)
+        else:
+            raise ValidationError(error_messages["validation_error"])
         # Optional, Register methods to the class. We only process instance
         # methods for the init. Class instance methods should be handled
         # seperately from the class instance.
         self.register_instance_methods(methods)
+        
+        # Deprecated, but useful in case you may want to pass in
+        # a MultiDatabaseModel configuration -> see models/db_model
+        self.name = name
         
         # Sets the rest of the parameters, returns None if not present.
         self._driver = config.get('driver')
@@ -351,9 +363,9 @@ class BaseDatabaseModel(ABC):
     def _page(self, sql):
         return self._sort(sql) if is_stored_procedure(sql) else self.page(sql)
     
-    def page(self, sql):
-        
-        
+    def page(self, sql):    
+        return sql
+    
     def sort(self, sql):
         "Override this if you want to provide sorting logic."
         return sql
@@ -376,6 +388,8 @@ class BaseDatabaseModel(ABC):
         params: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         "Should be implemented by the subclass"
+        if not self.conn:
+            
         return self.conn.execute(sql, params)
         
     def _read_sql_file(self):
