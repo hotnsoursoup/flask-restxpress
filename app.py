@@ -1,4 +1,5 @@
 from flask import Flask
+
 from utils.parsers.config_parser import update_config
 
 

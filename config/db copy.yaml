@@ -4,7 +4,7 @@ mydatabase1: # This is the name of the database as a key. It can be anything.
   dialect: required. Only accepts 'mysql', 'mssql', 'postgresql', 'oracle', 'sqlite'
   type: sqlalchemy # Optional. Defaults to sqlalchemy. Can choose sqlalchemy or odbc. odbc can support dsn strings.
   uri: None #Required if settings not present. uri for sqlalchemy means connection_uri, uri for odbc means dsn string or connection string.
-  settings: #required if uri not present.
+  params: #required if uri not present.
     host:
     port:
     username:

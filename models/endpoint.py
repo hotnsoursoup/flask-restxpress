@@ -1,8 +1,13 @@
-from pydantic import BaseModel, ValidationError, model_validator
-from typing import Optional, Callable
 import importlib
 import sys
 from pathlib import Path
+from typing import Callable
+from typing import Optional
+
+from pydantic import BaseModel
+from pydantic import ValidationError
+from pydantic import model_validator
+
 
 # Example allowed connectors
 allowed_connectors = ['connector1', 'connector2']

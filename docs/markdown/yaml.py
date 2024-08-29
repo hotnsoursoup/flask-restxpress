@@ -1,5 +1,6 @@
 import yaml
 
+
 def yaml_to_markdown(yaml_path: str, markdown_path: str) -> None:
     with open(yaml_path, 'r') as yaml_file:
         data = yaml.safe_load(yaml_file)

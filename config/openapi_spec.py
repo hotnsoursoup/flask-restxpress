@@ -1,6 +1,7 @@
 import yaml
-from openapi_schema_validator import OAS30Validator
 from jsonschema import ValidationError
+from openapi_schema_validator import OAS30Validator
+
 
 def load_yaml(file_path):
     with open(file_path, 'r') as file:

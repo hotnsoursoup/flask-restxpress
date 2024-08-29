@@ -1,6 +1,7 @@
 from functools import wraps
 
-from flask import request, abort
+from flask import abort
+from flask import request
 
 from components.factories.db import get_db
 from components.utils.formatters import format_marshaled_data

@@ -1,14 +1,21 @@
-app: myapp
+
 name: 'user'
+inherit: True
 route: /user
+database: #if not the default
 doc: optional. If you want to put in documentation.
 methods:
   get: 
     args:
+      id:
+        location: json
+        required: True
+        type: str
+        doc:
     handler: 'get_user' # Name of the handler function.
     handler_path: app.user.get # Optional, will default to location of settings file.
     doc: # Optional, for documentation.
-    error:
+    error_doc:
     model:
   post:
     model:

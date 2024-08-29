@@ -1,10 +1,10 @@
 import logging
-from typing import Union, Any
+from typing import Any
+from typing import Union
 
 from flask_restx import Namespace
 
 from components.factories.templates import Endpoint
-
 
 
 logger = logging.getLogger('endpoint')

@@ -1,5 +1,7 @@
-from .functions import get_user
 from auth import auth_method
+
+from .functions import get_user
+
 
 settings = {
     'name': 'user',
