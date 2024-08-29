@@ -1,16 +1,16 @@
-from typing import Dict
-from typing import Optional
-from typing import Literal
 from typing import Any
+from typing import Dict
+from typing import Literal
+from typing import Optional
 from typing import Union
+
 from pydantic import BaseModel
 from pydantic import Field
-from pydantic import model_validator
-from pydantic import ValidationError
 from pydantic import RootModel
+from pydantic import ValidationError
+from pydantic import model_validator
 
 from utils.utils import warn
-
 
 
 # Error and warning messages
@@ -89,8 +89,12 @@ class DatabaseModel(BaseModel):
     output: Optional[str] = Field(None, description="The output format for the database connection.")
 
     
-    @model_validator(mode='after')
-    def check_dialect_requirements(cls, values):
+    @model_validator(mode='before')
+    def field_validation(cls, values):
+        
+        if len(values.keys()) == 1:
+            values = next(iter(values.values()))
+
         dialect = values.get('dialect')
         uri = values.get('uri')
         params = values.get('params')
@@ -130,11 +134,17 @@ class MultiDatabaseModel(RootModel[Dict[str, DatabaseModel]]):
     pass
 
 
+models = {
+        "single": DatabaseModel,
+        "multi": MultiDatabaseModel
+    }
+
+
 def validate_db_model(
     db_config: dict[str, Any], 
-    model: Literal["single", "multi", "all"] = "single",
-    return_model: bool = False
-) -> Union[bool, Union[DatabaseModel, MultiDatabaseModel]]:
+    model: Literal["single", "multi", "any"] = "single",
+    return_model: bool = False,
+) -> Union[bool, Union[DatabaseModel, MultiDatabaseModel, None]]:
     """
     Validate the database configuration dictionary with the given 
     database model. 
@@ -147,35 +157,27 @@ def validate_db_model(
     :return bool: True if config matches model
     """
     
-    models = {
-        "single": DatabaseModel,
-        "multi": MultiDatabaseModel
-    }
+    
+    # In case the database config is nested within the config being passed in.
+    if 'db' in db_config:
+        db_config = db_config['db']
     
     def validate_and_return(model_class):
         try:
-            model_class.model_validate(db_config)
-            return model_class if return_model else True
+            validated_model = model_class.model_validate(db_config)
+            return validated_model if return_model else True
         except ValidationError:
             return False
+        
     
-    # In case a user is importing the database config from within the app
-    # config directly. We need to extract just the database configuration.
-    db_config = get_nested_config(db_config)
-    
-    # Checks against both models.
-    if model == "all":
+    if model in models:
+        return validate_and_return(models[model])
+    else:
         for model_class in models.values():
             if validate_and_return(model_class):
                 return validate_and_return(model_class)
         return False
-    # Checks against a single database
-    else:
 
-        try:
-            return validate_and_return(models[model])
-        except ValueError:
-            raise(messages['invalid_model'])
         
     
 def get_nested_config(config: dict) -> dict:
