@@ -9,17 +9,6 @@ from pydantic import ValidationError
 from pydantic import model_validator
 
 
-# Example allowed connectors
-allowed_connectors = ['connector1', 'connector2']
-
-# Error messages
-error_messages = {
-    'missing_connection': 'Connection information is missing.',
-    'invalid_connector': 'Invalid connector specified.',
-    'missing_connector_with_connection_string': 'Connector must be specified with a connection string.',
-    'missing_dialect': 'Dialect is missing and no connection string provided.'
-}
-
 class EndpointConfig(BaseModel):
     name: str
     url: str
@@ -38,7 +27,7 @@ class EndpointConfig(BaseModel):
         if not function_name:
             raise ValueError("Function name must be provided")
 
-        # Dynamically load the function from the specified module
+        # Dynamically load the handler function from the specified module
         try:
             # If module_path is a file path, convert it to a module name
             if Path(module_path).is_file():
@@ -55,26 +44,3 @@ class EndpointConfig(BaseModel):
             return values
         except (AttributeError, ModuleNotFoundError) as e:
             raise ValueError(f"Error loading function '{function_name}' from '{module_path}': {e}")
-
-# Example usage
-def example_function(arg):
-    return f"Function called with argument: {arg}"
-
-config_data = {
-    'name': 'example_endpoint',
-    'url': 'https://api.example.com/data',
-    'method': 'GET',
-    'headers': {'Authorization': 'Bearer token'},
-    'params': {'query': 'example'},
-    'function_name': 'example_function',
-    'module_path': 'functions'  # This can also be a path to a Python file
-}
-
-try:
-    endpoint_config = EndpointConfig(**config_data)
-    print("Configuration is valid:")
-    print(endpoint_config)
-    print(endpoint_config.function("test"))  # Call the dynamically loaded function
-except ValidationError as e:
-    print("Configuration is invalid:")
-    print(e)
